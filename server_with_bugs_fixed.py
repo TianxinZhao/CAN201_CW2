@@ -16,8 +16,6 @@ import shutil
 '''未导入Socket'''
 from socket import socket, AF_INET, SOCK_STREAM, SOL_SOCKET, SO_REUSEADDR
 
-
-
 MAX_PACKET_SIZE = 20480
 
 # Const Value
@@ -30,6 +28,7 @@ DIR_REQUEST, DIR_RESPONSE = 'REQUEST', 'RESPONSE'
 
 # 进行日志记录
 logger = logging.getLogger('')
+
 
 # 获取大文件的md5值
 def get_file_md5(filename):
@@ -406,7 +405,8 @@ def file_process(username, request_operation, json_data, bin_data, connection_so
         if os.path.exists(join('file', username, json_data[FIELD_KEY])) is True:
             logger.error(f'<-- The "key" {json_data[FIELD_KEY]} is completely uploaded.')
             connection_socket.send(
-                make_response_packet(OP_UPLOAD, 408, TYPE_FILE, f'The "key" {json_data[FIELD_KEY]} is completely uploaded.', {}))
+                make_response_packet(OP_UPLOAD, 408, TYPE_FILE,
+                                     f'The "key" {json_data[FIELD_KEY]} is completely uploaded.', {}))
             return
 
         if os.path.exists(join('tmp', username, json_data[FIELD_KEY])) is False:
@@ -534,7 +534,8 @@ def file_process(username, request_operation, json_data, bin_data, connection_so
                                                         'An available block.', rval, bin_data))
 
 
-def Step_service(connection_socket, addr):
+# 修改：重命名
+def STEP_service(connection_socket, addr):
     """
     STEP Protocol service
     :param connection_socket:
@@ -556,7 +557,8 @@ def Step_service(connection_socket, addr):
         if FIELD_DIRECTION in json_data:
             if json_data[FIELD_DIRECTION] == DIR_EARTH:
                 connection_socket.send(
-                    make_response_packet('3BODY', 333, 'DANGEROUS', f'DO NOT ANSWER! DO NOT ANSWER! DO NOT ANSWER!', {}))
+                    make_response_packet('3BODY', 333, 'DANGEROUS', f'DO NOT ANSWER! DO NOT ANSWER! DO NOT ANSWER!',
+                                         {}))
                 continue
 
         # Check the compulsory fields
@@ -655,8 +657,9 @@ def Step_service(connection_socket, addr):
             data_process(username, request_operation, json_data, connection_socket)
             continue
 
+        # 修改: data_process改为file_process()
         if request_type == TYPE_FILE:
-            data_process(username, request_operation, json_data, bin_data, connection_socket)
+            file_process(username, request_operation, json_data, bin_data, connection_socket)
             continue
 
     connection_socket.close()
