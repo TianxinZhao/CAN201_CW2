@@ -1,11 +1,12 @@
 import collections
 import socket
 import threading
+import json
 
 # 常量
 # todo: type &field 类型常量
 DIR_REQUEST = 'REQUEST'
-TYPE_FILE, TYPE_DATA, TYPE_AUTH = #todo
+TYPE_FILE, TYPE_DATA, TYPE_AUTH = 'FILE', 'DATA', 'AUTH'
 OP_SAVE, OP_DELETE, OP_GET, OP_UPLOAD, OP_DOWNLOAD, OP_BYE, OP_LOGIN = 'SAVE', 'DELETE', 'GET', 'UPLOAD', 'DOWNLOAD', 'BYE', 'LOGIN'
 SERVER_HOST = 'localhost'  # 服务器ip
 SERVER_PORT = 1379  # 服务器端口
@@ -114,11 +115,79 @@ def sender(client_socket):
             data = buffer.popleft()
             client_socket.sendall(data)
 
+def get_user_input():
+
+    print("Available actions:")
+    print("1. Login")
+    print("2. Upload file")
+    print("3. Download file")
+    print("4. Save data")
+    print("5. Get data")
+    print("6. Delete data")
+    print("7. Exit")
+    choice = input("Enter the number corresponding to the action you want to perform: ")
+
+    return choice
+
+def send_request(server_socket, request):
+    server_socket.sendall(json.dumps(request).encode())
+    response = server_socket.recv(2048).decode()
+    return response
+
 
 def main():
     # todo:
     #  用户决定要什么动作
     #  这里写一个方法
+
+    # server_ip = input("Enter the server IP address: ")
+    # server_port = int(input("Enter the server port: "))
+    #
+    #
+    # client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    # client_socket.connect((server_ip, server_port))
+    #
+    # while True:
+    #     choice = get_user_input()
+    #     request = {"operation": "", "type": "", "username": "", "password": "", "token": ""}
+    #
+    #     if choice == "1":
+    #         request["operation"] = "LOGIN"
+    #         request["type"] = "AUTH"
+    #         request["username"] = input("Enter your username: ")
+    #         request["password"] = input("Enter your password: ")
+    #     elif choice == "2":
+    #         request["operation"] = "UPLOAD"
+    #         request["type"] = "FILE"
+    #         request["token"] = input("Enter your token: ")
+    #
+    #     elif choice == "3":
+    #         request["operation"] = "DOWNLOAD"
+    #         request["type"] = "FILE"
+    #         request["token"] = input("Enter your token: ")
+    #
+    #     elif choice == "4":
+    #         request["operation"] = "SAVE"
+    #         request["type"] = "DATA"
+    #         request["token"] = input("Enter your token: ")
+    #
+    #     elif choice == "5":
+    #         request["operation"] = "GET"
+    #         request["type"] = "DATA"
+    #         request["token"] = input("Enter your token: ")
+    #
+    #     elif choice == "6":
+    #         request["operation"] = "DELETE"
+    #         request["type"] = "DATA"
+    #         request["token"] = input("Enter your token: ")
+    #
+    #     elif choice == "7":
+    #         request["operation"] = "BYE"
+    #         request["type"] = "AUTH"
+    #         request["token"] = input("Enter your token: ")
+    #     else:
+    #         print("Invalid choice. Please try again.")
+    #         continue
 
     file_name = "files/t.txt"
     # 其他代码...
