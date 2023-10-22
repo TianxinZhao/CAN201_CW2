@@ -13,8 +13,6 @@ SERVER_PORT = 1379  # 服务器端口
 BUFFER_SIZE = 1024  # 每个缓冲的大小
 MAX_UNITS = 16  # 队列缓冲最大长度
 
-currentBlock = 0
-cached = False  # 是否完成当前操作
 finished = False  # 是否完成当前操作
 force_stop = False  # 服务端错误
 buffer = collections.deque(maxlen=MAX_UNITS)  # 队列缓冲，每个对象应为数据包
@@ -48,7 +46,7 @@ def extract_data(packet: bytes) -> bytes:
 def receiver(client_socket, append):
     global force_stop
     try:
-        while not (force_stop or finished):
+        while not force_stop:
             package = client_socket.recv(BUFFER_SIZE)
             if not package:  # 远程端已关闭连接或发生其他错误
                 break
@@ -66,16 +64,32 @@ def receiver(client_socket, append):
         force_stop = True
 
 
+# 将缓存中的数据异步写入到磁盘
+def writer(file_name):
+    global force_stop, finished
+    try:
+        with open(file_name, 'ab') as file:  # 使用'ab'模式，这样你可以追加到文件而不是覆盖它
+            while not (force_stop or finished):
+                with buffer_condition:
+                    while not buffer:  # 如果buffer是空的 等待新数据
+                        buffer_condition.wait()
+                    package = buffer.popleft()  # 从buffer中取出数据
+                    file.write(extract_data(package))  # 写入到文件中
+    except Exception as e:
+        print(f"Error in writer: {e}")
+
+
 # 将文件异步写入缓存队列
 def reader(file_name):
-    global force_stop, cached, currentBlock
+    global force_stop, finished
+    block_index = 0
     with open(file_name, 'rb') as file:
-        while not (force_stop or cached):
+        while not (force_stop or finished):
             with buffer_condition:
                 if len(buffer) < MAX_UNITS:
                     file_data = file.read(BUFFER_SIZE)
                     if not file_data:
-                        cached = True
+                        finished = True
                         break
 
                     # todo:
@@ -86,26 +100,23 @@ def reader(file_name):
                     json_length = len(json_text).to_bytes(4, 'big')
                     bin_length = len(file_data).to_bytes(4, 'big')
 
-                    currentBlock = currentBlock + 1
+                    block_index = block_index + 1
                     buffer.append(json_length + bin_length + json_data + file_data)
                     buffer_condition.notify()
 
 
 # 异步发送所有缓存中的数据
 def sender(client_socket):
-    global cached, finished
-    while not (force_stop or cached or buffer):
+    global finished
+    while not (force_stop or finished or buffer):
         with buffer_condition:
             while not buffer:
                 buffer_condition.wait()
             data = buffer.popleft()
             client_socket.sendall(data)
-    import time
-    time.sleep(1.01)
-    finished = True
-
 
 def get_user_input():
+
     print("Available actions:")
     print("1. Login")
     print("2. Upload file")
@@ -115,33 +126,27 @@ def get_user_input():
     print("6. Delete data")
     print("7. Exit")
     choice = input("Enter the number corresponding to the action you want to perform: ")
+
     return choice
 
-
-# todo:
-# 这个是干什么的
 def send_request(server_socket, request):
     server_socket.sendall(json.dumps(request).encode())
     response = server_socket.recv(2048).decode()
     return response
 
 
-# todo:
-# 根据当前block/总block计算进度条
-def progress_bar():
-    pass
-
-
 def main():
+    # todo:
+    #  用户决定要什么动作
+    #  这里写一个方法
+
     # server_ip = input("Enter the server IP address: ")
     # server_port = int(input("Enter the server port: "))
-
-    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client_socket.connect(('127.0.0.1', 1379))
-
-    # 测试时这段代码注释掉
+    #
+    #
+    # client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     # client_socket.connect((server_ip, server_port))
-
+    #
     # while True:
     #     choice = get_user_input()
     #     request = {"operation": "", "type": "", "username": "", "password": "", "token": ""}
@@ -190,6 +195,7 @@ def main():
     # 创建客户端socket
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client_socket.connect((SERVER_HOST, SERVER_PORT))
+
     receiver_thread = threading.Thread(target=receiver, args=(client_socket, False))
     reader_thread = threading.Thread(target=reader, args=(file_name,))
     sender_thread = threading.Thread(target=sender, args=(client_socket,))
