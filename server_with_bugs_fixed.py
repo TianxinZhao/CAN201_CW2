@@ -15,7 +15,7 @@ import shutil
 
 '''未导入Socket'''
 from socket import socket, AF_INET, SOCK_STREAM, SOL_SOCKET, SO_REUSEADDR
-
+# fixme： 2048?20480
 MAX_PACKET_SIZE = 20480
 
 # Const Value
@@ -238,6 +238,7 @@ def data_process(username, request_operation, json_data, connection_socket):
         try:
             with open(join('data', username, key), 'w') as fid:
                 json.dump(json_data, fid)
+                # todo: 是否为 error
                 logger.error(f'<-- Data is saved with key "{key}"')
                 connection_socket.send(
                     make_response_packet(OP_SAVE, 200, TYPE_DATA, f'Data is saved with key "{key}"', {FIELD_KEY: key}))
@@ -259,6 +260,7 @@ def data_process(username, request_operation, json_data, connection_socket):
             return
         try:
             os.remove(join('data', username, json_data[FIELD_KEY]))
+            # todo: 是否为 error
             logger.error(f'<-- The "key" {json_data[FIELD_KEY]} is deleted.')
             connection_socket.send(
                 make_response_packet(OP_DELETE, 200, TYPE_DATA, f'The "key" {json_data[FIELD_KEY]} is deleted.',
@@ -281,7 +283,7 @@ def file_process(username, request_operation, json_data, bin_data, connection_so
     if request_operation == OP_GET:
         if FIELD_KEY not in json_data.keys():
             logger.info(f'--> Plan to download file {json_data[FIELD_KEY]}')
-
+            # todo: 是否为 info
             connection_socket.send(
                 make_response_packet(OP_GET, 410, TYPE_FILE, f'Field "key" is missing for DATA GET.', {}))
             return
@@ -395,6 +397,7 @@ def file_process(username, request_operation, json_data, bin_data, connection_so
 
     if request_operation == OP_UPLOAD:
         if FIELD_KEY not in json_data.keys():
+            # todo: 是否为 error
             logger.info(f'--> Upload file/block without any key.')
             logger.error(f'<-- Field "key" is missing for FILE block uploading.')
             connection_socket.send(
@@ -616,6 +619,7 @@ def STEP_service(connection_socket, addr):
                     continue
                 else:
                     # Login successful
+                    #
                     user_str = f'{json_data[FIELD_USERNAME].replace(".", "_")}.' \
                                f'{get_time_based_filename("login")}'
                     md5_auth_str = hashlib.md5(f'{user_str}kjh20)*(1'.encode()).hexdigest()
@@ -705,7 +709,12 @@ def tcp_listener(server_ip, server_port):
             connection_socket, addr = server_socket.accept()
             logger.info(f'--> New connection from {addr[0]} on {addr[1]}')
             th = Thread(target=STEP_service, args=(connection_socket, addr))
+            '''
+            th.start()
+            没设置
+            '''
             th.daemon = True
+            th.start()
 
         except Exception as ex:
             logger.error(f'{str(ex)}@{ex.__traceback__.tb_lineno}')
