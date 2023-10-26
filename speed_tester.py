@@ -16,9 +16,9 @@ def send_save():
 
     FIELD_SIZE = 'size'
     data = {
-        FIELD_SIZE: os.path.getsize('files/v.dll')
+        FIELD_SIZE: os.path.getsize('files/toSend')
     }
-    print(os.path.getsize('files/v.dll'))
+    print(os.path.getsize('files/toSend'))
     json_data = json.dumps(data).encode()
     data = 0
     json_length = len(json_data).to_bytes(4, 'big')
@@ -59,7 +59,7 @@ def send_file(filename):
 
 
 if __name__ == "__main__":
-    file_to_send = "files/v.dll"
+    file_to_send = "files/toSend"
 
     send_save()
     send_file(file_to_send)
