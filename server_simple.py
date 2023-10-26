@@ -132,11 +132,10 @@ def main():
     server_socket = socket(AF_INET, SOCK_STREAM)
     server_socket.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
     server_socket.bind((server_ip, int(server_port)))
-    server_socket.listen(20)
+    server_socket.listen(2000)
     while True:
         try:
             connection_socket, addr = server_socket.accept()
-            # print(f'--> New connection from {addr[0]} on {addr[1]}')
             th = Thread(target=STEP_service, args=(connection_socket, addr))
             th.daemon = True
             th.start()
