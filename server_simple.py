@@ -1,5 +1,6 @@
 import json
 import os
+import threading
 from os.path import join, getsize
 from threading import Thread
 import struct
@@ -21,6 +22,7 @@ FIELD_STATUS, FIELD_STATUS_MSG, FIELD_BLOCK_INDEX = 'status', 'status_msg', 'blo
 DIR_REQUEST, DIR_RESPONSE = 'REQUEST', 'RESPONSE'
 
 isFirst = True
+write_lock = threading.Lock()
 
 
 def get_tcp_packet(conn):
@@ -89,18 +91,21 @@ def file_process(json_data, bin_data, connection_socket):
     if block_index != total_block - 1 and len(bin_data) != block_size:
         print(f'<-- The "block_size" is wrong2')
         return
+    with write_lock:
+        with open(file_path, 'rb+') as fid:
+            fid.seek(block_size * block_index)
+            fid.write(bin_data)
+        with open('files/tmplog', 'a') as fid:
+            fid.write(f'{block_index}\n')
 
-    with open(file_path, 'rb+') as fid:
-        fid.seek(block_size * block_index)
-        fid.write(bin_data)
-    with open('files/tmplog', 'a') as fid:
-        fid.write(f'{block_index}\n')
-    fid = open('files/tmplog', 'r')
-    lines = fid.readlines()
-    fid.close()
-    if len(set(lines)) == total_block:
-        os.remove('files/tmplog')
-        print("congratulation!!")
+    with write_lock:
+        fid = open('files/tmplog', 'r')
+        lines = fid.readlines()
+        fid.close()
+        if len(set(lines)) == total_block :
+            os.remove('files/tmplog')
+            print("congratulation!!")
+
     received_pkt = received_pkt + 1
     b = block_index.to_bytes(4, 'big')
     connection_socket.send(b)
