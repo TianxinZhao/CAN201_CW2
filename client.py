@@ -1,5 +1,8 @@
-import hashlib
+
 import socket
+import json
+import hashlib
+import struct
 
 # type&field 类型常量
 DIR_REQUEST = 'REQUEST'
@@ -19,21 +22,81 @@ json_base = ''
 #  根据action设置一个基本的json
 #  包含token,operation,type,length等
 #  不包含当前块信息
-def set_json(action):
-    global json_base
-    pass
+def create_protocol_message(operation, username, password, direction='REQUEST', **kwargs):
+    message_data = {
+        'operation': operation,
+        'type': 'AUTH',
+        'username': username,
+        'password': password,
+        'direction': direction,
+    }
 
+    message_data.update(kwargs)
+    json_message = json.dumps(message_data)
+    message_length = len(json_message)
+    full_message = struct.pack('!II', message_length, 0) + json_message.encode()
+    return full_message
+
+def receive_response(sock):
+    data_received = sock.recv(4096)
+    response = json.loads(data_received[8:].decode())
+    return response
 
 # todo
 #  发送name和 password
 #  接收 token
 #  可以参考源文件600-650行
-def login(name):
+def login(student_id):
     global TOKEN
+    password = hashlib.md5(student_id.encode()).hexdigest()
+    login_request = create_protocol_message('LOGIN', student_id, password)
 
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.connect((SERVER_IP, SERVER_PORT))
+        sock.sendall(login_request)
+        response = receive_response(sock)
+
+        if 'token' in response:
+            print("Login successful. token received:", response['token'], '\n')
+            TOKEN = response['token']
+        else:
+            print("Login failed or token not received:", response, '\n')
+            return None
 
 def menu():
-    pass
+    global TOKEN
+    while True:
+
+        print("Choose an operation:")
+        print("1. Login")
+        print("2. Upload file")
+        print("3. Exit")
+
+        choice = input("Enter your choice (1-3): ")
+
+        if choice == '1':
+
+            if TOKEN:
+                print("Already logged in. TOKEN:", TOKEN)
+            else:
+                student_id = input("Enter your student ID: ")
+                TOKEN = login(student_id)
+                if TOKEN:
+                    set_json('LOGIN')
+
+        elif choice == '2':
+
+            if TOKEN:
+                #todo
+                pass
+            else:
+                print("Please log in first.")
+        elif choice == '3':
+
+            print("Exiting.")
+            break
+        else:
+            print("Invalid choice. Please try again.")
 
 
 # todo
@@ -57,10 +120,13 @@ def user_input():
 
 
 def main():
+    global TOKEN
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client_socket.connect(('127.0.0.1', 1379))
 
     # todo
+
+    menu()
 
     client_socket.close()
     print("Main function close")
