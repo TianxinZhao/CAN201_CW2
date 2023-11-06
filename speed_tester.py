@@ -23,13 +23,14 @@ def send_save(file_size):
     packet = (json_length + bin_length + json_data)
     client_socket.send(packet)
     client_socket.close()
-    time.sleep(0.2)
+    time.sleep(0.3)
+
 
 def send_file(filename, count):
     global FIELD_BLOCK_INDEX
     offset = count * 2048
 
-    with open(filename, 'rb') as f:
+    with (open(filename, 'rb') as f):
         f.seek(offset)
         data = f.read(2048)
         if data:
@@ -49,15 +50,13 @@ def send_file(filename, count):
                 response = client_socket.recv(1024)
             except socket.timeout:
                 print("time out ->")
-                print(count)
                 thread2 = threading.Thread(target=wrapper_send_file, args=(file_to_send, i))
                 thread2.start()
                 thread2.join()
             client_socket.close()
 
-            if count % 100 == 0:
-                print(count)
-
+            if count % 500 == 0:
+                print(count, 'sent')
             if len(data) != 2048:
                 print('last')
                 print(len(data))
@@ -72,23 +71,23 @@ if __name__ == "__main__":
     # Calculate the number of threads needed
     num_threads = (file_size + 2047) // 2048
 
-    max_threads = 512
+    max_threads = 128
     threads = []
     semaphore = threading.Semaphore(max_threads)
 
 
     def wrapper_send_file(filename, count):
         send_file(filename, count)
-        # semaphore.release()
+        semaphore.release()
+
 
     print(num_threads)
 
     for i in range(num_threads):
-        # semaphore.acquire()
+        semaphore.acquire()
         thread = threading.Thread(target=wrapper_send_file, args=(file_to_send, i))
         threads.append(thread)
         thread.start()
-
 
     for thread in threads:
         thread.join()

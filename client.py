@@ -5,7 +5,7 @@ import socket
 DIR_REQUEST = 'REQUEST'
 TYPE_FILE, TYPE_DATA, TYPE_AUTH = 'FILE', 'DATA', 'AUTH'
 OP_SAVE, OP_UPLOAD, OP_LOGIN = 'SAVE', 'UPLOAD', 'LOGIN'
-TOKEN = ''
+TOKEN = None
 SERVER_IP, SERVER_PORT = '127.0.0.1', 1379
 
 current_block = 0
@@ -30,11 +30,14 @@ def set_json(action):
 #  可以参考源文件600-650行
 def login(name):
     global TOKEN
-    password = hashlib.md5(name.encode()).hexdigest().lower()
+
+
+def menu():
+    pass
 
 
 # todo
-# 根据当前block/总block计算进度条
+#   根据current_block total_block打印进度条
 def progress_bar():
     # fixme
     pass
