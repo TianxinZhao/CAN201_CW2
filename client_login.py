@@ -42,7 +42,7 @@ def login(student_id):
 
         if 'token' in response:
             print("Login successful. token received:", response['token'], '\n')
-            TOKEN= response['token']
+            TOKEN = response['token']
         else:
             print("Login failed or token not received:", response, '\n')
             return None

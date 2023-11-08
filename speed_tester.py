@@ -6,7 +6,7 @@ import threading
 
 FIELD_BLOCK_INDEX = 'block_index'
 FIELD_SIZE = 'size'
-
+FILE_NAME = "files/toSend"
 
 def send_save(file_size):
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -26,19 +26,18 @@ def send_save(file_size):
     time.sleep(0.3)
 
 
-def send_file(filename, count):
-    global FIELD_BLOCK_INDEX
-    offset = count * 2048
+def send_file(filename, block):
+    offset = block * 2048
 
     with (open(filename, 'rb') as f):
         f.seek(offset)
         data = f.read(2048)
         if data:
             client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            client_socket.connect(('127.0.0.1', 1379))
+            client_socket.connect((S, 1379))
 
             json_text = {
-                FIELD_BLOCK_INDEX: count
+                FIELD_BLOCK_INDEX: block
             }
             json_data = json.dumps(json_text).encode()
             json_length = len(json_data).to_bytes(4, 'big')
@@ -50,22 +49,22 @@ def send_file(filename, count):
                 response = client_socket.recv(1024)
             except socket.timeout:
                 print("time out ->")
-                thread2 = threading.Thread(target=wrapper_send_file, args=(file_to_send, i))
+                thread2 = threading.Thread(target=wrapper_send_file, args=(FILE_NAME, i))
                 thread2.start()
                 thread2.join()
             client_socket.close()
 
-            if count % 500 == 0:
-                print(count, 'sent')
+            if block % 500 == 0:
+                print(block, 'sent')
             if len(data) != 2048:
                 print('last')
                 print(len(data))
-                print(count)
+                print(block)
 
 
 if __name__ == "__main__":
-    file_to_send = "files/toSend"
-    file_size = os.path.getsize(file_to_send)
+
+    file_size = os.path.getsize(FILE_NAME)
     send_save(file_size)
 
     # Calculate the number of threads needed
@@ -81,11 +80,9 @@ if __name__ == "__main__":
         semaphore.release()
 
 
-    print(num_threads)
-
     for i in range(num_threads):
         semaphore.acquire()
-        thread = threading.Thread(target=wrapper_send_file, args=(file_to_send, i))
+        thread = threading.Thread(target=wrapper_send_file, args=(FILE_NAME, i))
         threads.append(thread)
         thread.start()
 
