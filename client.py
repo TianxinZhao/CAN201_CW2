@@ -4,8 +4,8 @@ import os
 import socket
 import struct
 import threading
+import tqdm
 
-# type&field 类型常量
 DIR_REQUEST = 'REQUEST'
 TYPE_FILE, TYPE_DATA, TYPE_AUTH = 'FILE', 'DATA', 'AUTH'
 OP_SAVE, OP_UPLOAD, OP_LOGIN = 'SAVE', 'UPLOAD', 'LOGIN'
@@ -26,61 +26,68 @@ finished = False
 json_base = ''
 
 
-# todo:
-#  修改make_response_packet,合并 make_response_packet, step_login_message, step_save_head
-def make_response_packet(operation, status_code, data_type, status_msg, json_data, bin_data=None):
+# 用于启动socket 可以放到main方法中，socket只启动一次
+def socket_setup():
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.connect((SERVER_IP, SERVER_PORT))
+    return sock
+
+
+# 用户交互
+def menu(sock):
+    global TOKEN
+    global FILE_PATH
+
+    while True:
+        print("STEP CLIENT V1.0"
+              "\nChoose an operation:"
+              "\n1. Login"
+              "\n2. Upload file"
+              "\n3. Logout"
+              "\nEnter your choice (1-3): ")
+
+        choice = input()
+        if choice == '1':
+            if TOKEN:
+                print("Already logged in. TOKEN:", TOKEN)
+            else:
+                # student_id = input("Enter your student ID: ")
+                student_id = '123456'
+                login(student_id, sock)
+        elif choice == '2':
+            if TOKEN:
+                # path = input("Please enter the file path")
+                FILE_PATH = "files/toSend"
+                file_size = os.path.getsize(FILE_PATH)
+                save(sock, FILE_PATH, file_size)
+            else:
+                print('Please login first')
+        elif choice == '3':
+            print("Logging out.")
+            TOKEN = None
+            break
+        else:
+            print("Invalid choice. Please try again.")
+
+
+# 用于生成json信息以及进行打包
+def make_packaged_message(operation, data_type, json_data):
+    global TOKEN
+    if TOKEN:
+        json_data[FIELD_TOKEN] = TOKEN
     json_data[FIELD_OPERATION] = operation
-    json_data[FIELD_DIRECTION] = DIR_REQUEST
     json_data[FIELD_TYPE] = data_type
-    return make_packet(json_data, bin_data)
-
-
-def make_packet(json_data, bin_data=None):
-    j = json.dumps(dict(json_data), ensure_ascii=False)
-    j_len = len(j)
-    if bin_data is None:
-        return struct.pack('!II', j_len, 0) + j.encode()
-    else:
-        return struct.pack('!II', j_len, len(bin_data)) + j.encode() + bin_data
-
-
-# fixme
-#  改为 type&field 类型常量
-def step_login_message(operation, username, password, direction=DIR_REQUEST, **kwargs):
-    message_data = {
-        'operation': operation,
-        'type': 'AUTH',
-        'username': username,
-        'password': password,
-        'direction': direction,
-    }
-    message_data.update(kwargs)
-    json_message = json.dumps(message_data)
+    json_data[FIELD_DIRECTION] = DIR_REQUEST
+    json_message = json.dumps(json_data)
     message_length = len(json_message)
     full_message = struct.pack('!II', message_length, 0) + json_message.encode()
     return full_message
 
 
-def step_save_head(block, bin_length):
-    pass
-
-
-def step_upload_head(block, bin_length):
-    # json_text = {
-    #     FIELD_BLOCK_INDEX: block
-    # }
-    #
-    # json_data = json.dumps(json_text).encode()
-    # json_length = len(json_data).to_bytes(4, 'big')
-    bin_length = len(bin_length).to_bytes(4, 'big')
-    pass
-
-
-def step_status_code():
-    pass
-
-
-def receive_response(sock):
+# 发送json消息以及接受服务器json消息
+def sending_receiving(sock, message):
+    sock.sendall(message)
     received = sock.recv(PACKET_LENGTH)
     json_length = int.from_bytes(received[0:4], 'big')
     bin_length = int.from_bytes(received[4:8], 'big')
@@ -89,16 +96,12 @@ def receive_response(sock):
     return json_data, bin_data
 
 
-def login(student_id):
+# 用于登录获得token
+def login(student_id, sock):
     global TOKEN
-    password = hashlib.md5(student_id.encode()).hexdigest()
-    login_request = step_login_message(OP_LOGIN, student_id, password)
-
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as token_sock:
-        token_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        token_sock.connect((SERVER_IP, SERVER_PORT))
-        token_sock.sendall(login_request)
-        json_response, data_response = receive_response(token_sock)
+    login_json = {FIELD_USERNAME: student_id, FIELD_PASSWORD: hashlib.md5(student_id.encode()).hexdigest()}
+    login_message = make_packaged_message(OP_LOGIN, TYPE_AUTH, login_json)
+    json_response, data_response = sending_receiving(sock, login_message)
 
     if FIELD_TOKEN in json_response:
         TOKEN = json_response[FIELD_TOKEN]
@@ -107,18 +110,25 @@ def login(student_id):
         print(f"Login failed or token not received\nMessage: {json_response}", '\n')
 
 
-def send_save(file_size):
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
-        client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        client_socket.connect((SERVER_IP, SERVER_PORT))
-        client_socket.send(step_save_head(123, 456, ))
-        print(file_size)
-        _, _ = receive_response
+# 用于获得upload计划
+def save(sock, file_path, file_size):
+    save_json = {FIELD_KEY: 'file_path', FIELD_SIZE: 1}
+    save_message = make_packaged_message(OP_SAVE, TYPE_FILE, save_json)
+    json_response, data_response = sending_receiving(sock, save_message)
+
+    if json_response[FIELD_STATUS] == 200:
+        print(f'total_block: {json_response["total_block"]}')
+        print(f'block_size: {json_response["block_size"]}\n')
 
 
 # todo
-#   根据current_block total_block打印进度条
+def upload():
+    pass
+
+
+# todo
 def progress_bar():
+
     pass
 
 
@@ -155,14 +165,13 @@ def wrapper_send_file(block):
 
 
 def main():
-    global FILE_PATH
-    student_id = '122'
-    FILE_PATH = "files/toSend"
-    file_size = os.path.getsize(FILE_PATH)
-    total_threads = (file_size + PACKET_LENGTH - 1) // PACKET_LENGTH
-    threads = []
 
-    login(student_id)
+    # total_threads = (file_size + PACKET_LENGTH - 1) // PACKET_LENGTH
+    # threads = []
+
+    sock = socket_setup()
+    menu(sock)
+
     # send_save(file_size)
     #
     # for i in range(total_threads):
