@@ -12,19 +12,19 @@ OP_SAVE, OP_UPLOAD, OP_LOGIN = 'SAVE', 'UPLOAD', 'LOGIN'
 FIELD_OPERATION, FIELD_DIRECTION, FIELD_TYPE, FIELD_USERNAME, FIELD_PASSWORD, FIELD_TOKEN = 'operation', 'direction', 'type', 'username', 'password', 'token'
 FIELD_KEY, FIELD_SIZE, FIELD_TOTAL_BLOCK, FIELD_MD5, FIELD_BLOCK_SIZE = 'key', 'size', 'total_block', 'md5', 'block_size'
 FIELD_STATUS, FIELD_STATUS_MSG, FIELD_BLOCK_INDEX = 'status', 'status_msg', 'block_index'
-
-current_block, total_block = 0, 0
-finished = False
-
 TOKEN = None
-MAX_CONCURRENCY = 128
-SEMAPHORE = threading.Semaphore(MAX_CONCURRENCY)
+
+MAX_CONCURRENCY = 4
 PACKET_LENGTH = 20480
+RE_TRANSMISSION_TIME = 10
+SEND_COUNT, TOTAL_BLOCK = 0, 0
+SEMAPHORE = threading.Semaphore(MAX_CONCURRENCY)
 SERVER_IP, SERVER_PORT = '127.0.0.1', 1379
-FILE_PATH, FILE_SIZE = '', 0
-RE_TIME = 20
+FILE_PATH, FILE_NAME, FILE_SIZE = '', '', 0
+FAST_TEST_MODE_FOR_CAN201 = True
 
 
+# todo:进度条和argparse，不要修改其他代码
 def progress_bar():
     pass
 
@@ -83,6 +83,7 @@ def login(student_id):
 
 
 def step_save_request(file_name, file_size):
+    global TOTAL_BLOCK
     sock = socket_setup()
     save_json = {
         FIELD_KEY: file_name,
@@ -92,7 +93,8 @@ def step_save_request(file_name, file_size):
     sock.sendall(save_message)
     json_response, _ = get_step_data(sock)
     if get_status_code(json_response) == 200:
-        print(f'total_block: {json_response["total_block"]} with block_size: {json_response["block_size"]}\n')
+        print(f'total_block: {json_response[FIELD_TOTAL_BLOCK]} with block_size: {json_response[FIELD_BLOCK_SIZE]}\n')
+        TOTAL_BLOCK = json_response[FIELD_TOTAL_BLOCK]
     sock.close()
 
 
@@ -104,12 +106,12 @@ def step_upload_block(block_index):
         if block_data:
             client_socket = socket_setup()
             upload_json = {
-                FIELD_KEY: 'toSend',
+                FIELD_KEY: FILE_NAME,
                 FIELD_BLOCK_INDEX: block_index
             }
             step_head = create_step_head(OP_UPLOAD, TYPE_FILE, upload_json, len(block_data))
             client_socket.send(step_head + block_data)
-            client_socket.settimeout(RE_TIME)
+            client_socket.settimeout(RE_TRANSMISSION_TIME)
             try:
                 json_data, _ = get_step_data(client_socket)
                 if get_status_code(json_data) == 200:
@@ -117,37 +119,48 @@ def step_upload_block(block_index):
                 else:
                     print(json_data)
             except socket.timeout:
-                print(f"Resend{block_index}")
+                print(f"Re Transmission{block_index}")
                 step_upload_block(block_index)
 
 
-def wrapper_send_file(block_index):
+def concurrent_sender(block_index, intervals):
     step_upload_block(block_index)
-    SEMAPHORE.release()
+    if intervals is None:
+        SEMAPHORE.release()
+        return
+
+    while block_index + intervals <= TOTAL_BLOCK:
+        block_index = block_index + intervals
+        step_upload_block(block_index)
 
 
 def main():
-    global FILE_PATH, FILE_SIZE
+    global FILE_PATH, FILE_NAME, FILE_SIZE, SEND_COUNT
     student_id = '122'
     FILE_PATH = "files/toSend"
+    FILE_NAME = os.path.basename(FILE_PATH)
     FILE_SIZE = os.path.getsize(FILE_PATH)
     total_threads = (FILE_SIZE + PACKET_LENGTH - 1) // PACKET_LENGTH
     threads = []
 
-    login("123456")
-    step_save_request('toSend', FILE_SIZE)
-    print(total_threads)
+    login(student_id)
+    step_save_request(FILE_NAME, FILE_SIZE)
 
-    for i in range(total_threads):
-        SEMAPHORE.acquire()
-        thread = threading.Thread(target=wrapper_send_file, args=(i,))
-        threads.append(thread)
-        thread.start()
+    if FAST_TEST_MODE_FOR_CAN201:
+        for i in range(MAX_CONCURRENCY):
+            thread = threading.Thread(target=concurrent_sender, args=(i, MAX_CONCURRENCY))
+            threads.append(thread)
+            thread.start()
+
+    else:
+        for i in range(total_threads):
+            SEMAPHORE.acquire()
+            thread = threading.Thread(target=concurrent_sender, args=(i, None))
+            threads.append(thread)
+            thread.start()
 
     for thread in threads:
         thread.join()
-
-    # print("sent")
 
 
 if __name__ == '__main__':
