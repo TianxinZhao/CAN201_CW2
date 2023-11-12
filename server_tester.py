@@ -1,9 +1,10 @@
 import json
 import os
+import threading
+from threading import Thread
 from os.path import join, getsize
 import hashlib
 import argparse
-from threading import Thread
 import struct
 import time
 import logging
@@ -15,8 +16,10 @@ import shutil
 
 '''未导入Socket'''
 from socket import socket, AF_INET, SOCK_STREAM, SOL_SOCKET, SO_REUSEADDR
+
 # fixme： 2048?20480
 MAX_PACKET_SIZE = 20480
+write_lock = threading.Lock()
 
 # Const Value
 OP_SAVE, OP_DELETE, OP_GET, OP_UPLOAD, OP_DOWNLOAD, OP_BYE, OP_LOGIN, OP_ERROR = 'SAVE', 'DELETE', 'GET', 'UPLOAD', 'DOWNLOAD', 'BYE', 'LOGIN', "ERROR"
@@ -228,13 +231,16 @@ def data_process(username, request_operation, json_data, connection_socket):
 
     if request_operation == OP_SAVE:
         key = str(uuid.uuid4())
+        print(1)
         if FIELD_KEY in json_data.keys():
             key = json_data[FIELD_KEY]
         logger.info(f'--> Save data with key "{key}"')
+        print(2)
         if os.path.exists(join('data', username, key)) is True:
             logger.error(f'<-- This key "{key}" is existing.')
             connection_socket.send(make_response_packet(OP_SAVE, 402, TYPE_DATA, f'This key "{key}" is existing.', {}))
             return
+        print(3)
         try:
             with open(join('data', username, key), 'w') as fid:
                 json.dump(json_data, fid)
@@ -322,6 +328,7 @@ def file_process(username, request_operation, json_data, bin_data, connection_so
         return
 
     if request_operation == OP_SAVE:
+        print('in')
         key = str(uuid.uuid4())
         if FIELD_KEY in json_data.keys():
             key = json_data[FIELD_KEY]
@@ -345,6 +352,7 @@ def file_process(username, request_operation, json_data, bin_data, connection_so
                 FIELD_TOTAL_BLOCK: total_block,
                 FIELD_BLOCK_SIZE: block_size,
             }
+            print('prepare write')
             # Write a tmp file
             with open(join('tmp', username, key), 'wb+') as fid:
                 fid.seek(file_size - 1)
@@ -352,8 +360,9 @@ def file_process(username, request_operation, json_data, bin_data, connection_so
 
             fid = open(join('tmp', username, key + '.log'), 'w')
             fid.close()
-
-            logger.error(f'<-- Upload plan: key {key}, total block_index number {total_block}, block_index size {block_size}.')
+            print('write 1')
+            logger.error(
+                f'<-- Upload plan: key {key}, total block_index number {total_block}, block_index size {block_size}.')
             connection_socket.send(
                 make_response_packet(OP_SAVE, 200, TYPE_FILE, f'This is the upload plan.', rval))
         except Exception as ex:
@@ -452,15 +461,16 @@ def file_process(username, request_operation, json_data, bin_data, connection_so
             connection_socket.send(
                 make_response_packet(OP_UPLOAD, 406, TYPE_FILE, f'The "block_size" is wrong.', {}))
             return
+        with write_lock:
+            with open(file_path, 'rb+') as fid:
+                fid.seek(block_size * block_index)
+                fid.write(bin_data)
+            with open(file_path + '.log', 'a') as fid:
+                fid.write(f'{block_index}\n')
+            fid = open(file_path + '.log', 'r')
+            lines = fid.readlines()
+            fid.close()
 
-        with open(file_path, 'rb+') as fid:
-            fid.seek(block_size * block_index)
-            fid.write(bin_data)
-        with open(file_path + '.log', 'a') as fid:
-            fid.write(f'{block_index}\n')
-        fid = open(file_path + '.log', 'r')
-        lines = fid.readlines()
-        fid.close()
         rval = {
             FIELD_KEY: json_data[FIELD_KEY],
             FIELD_BLOCK_INDEX: block_index
@@ -531,7 +541,8 @@ def file_process(username, request_operation, json_data, bin_data, connection_so
                 FIELD_KEY: json_data[FIELD_KEY],
                 FIELD_SIZE: len(bin_data)
             }
-            logger.info(f'<-- Return block_index {block_index}({len(bin_data)}bytes) of "key" {json_data[FIELD_KEY]} >= 0.')
+            logger.info(
+                f'<-- Return block_index {block_index}({len(bin_data)}bytes) of "key" {json_data[FIELD_KEY]} >= 0.')
 
             connection_socket.send(make_response_packet(OP_DOWNLOAD, 200, TYPE_FILE,
                                                         'An available block_index.', rval, bin_data))
