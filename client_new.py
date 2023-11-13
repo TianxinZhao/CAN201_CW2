@@ -14,11 +14,11 @@ FIELD_KEY, FIELD_SIZE, FIELD_TOTAL_BLOCK, FIELD_MD5, FIELD_BLOCK_SIZE = 'key', '
 FIELD_STATUS, FIELD_STATUS_MSG, FIELD_BLOCK_INDEX = 'status', 'status_msg', 'block_index'
 TOKEN = None
 
-MAX_CONCURRENCY = 128
+PARALLELISM = 128
 PACKET_LENGTH = 20480
 RE_TRANSMISSION_TIME = 10
 SEND_COUNT, TOTAL_BLOCK = 0, 0
-SEMAPHORE = threading.Semaphore(MAX_CONCURRENCY)
+SEMAPHORE = threading.Semaphore(PARALLELISM)
 SERVER_IP, SERVER_PORT = '127.0.0.1', 1379
 FILE_PATH, FILE_NAME, FILE_SIZE = '', '', 0
 SEND_LOCK = threading.Lock()
@@ -180,7 +180,6 @@ def main():
     RE_TRANSMISSION_TIME = RE_TRANSMISSION_TIME * total_threads % 5000
 
     for i in range(total_threads):
-        # if i % 16 == 0:
         SEMAPHORE.acquire()
         thread = threading.Thread(target=concurrent_sender, args=(i, None))
         threads.append(thread)
