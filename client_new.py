@@ -14,15 +14,15 @@ FIELD_KEY, FIELD_SIZE, FIELD_TOTAL_BLOCK, FIELD_MD5, FIELD_BLOCK_SIZE = 'key', '
 FIELD_STATUS, FIELD_STATUS_MSG, FIELD_BLOCK_INDEX = 'status', 'status_msg', 'block_index'
 TOKEN = None
 
-MAX_CONCURRENCY = 16
+MAX_CONCURRENCY = 128
 PACKET_LENGTH = 20480
 RE_TRANSMISSION_TIME = 10
 SEND_COUNT, TOTAL_BLOCK = 0, 0
 SEMAPHORE = threading.Semaphore(MAX_CONCURRENCY)
 SERVER_IP, SERVER_PORT = '127.0.0.1', 1379
 FILE_PATH, FILE_NAME, FILE_SIZE = '', '', 0
-SAFETY_TEST_MODE_FOR_CAN201 = True
-SEND_LOCK = threading.Condition()
+SEND_LOCK = threading.Lock()
+TEST_MODE_FOR_CAN201 = True
 
 
 def socket_setup():
@@ -105,20 +105,21 @@ def step_upload_block(block_index):
                 FIELD_BLOCK_INDEX: block_index
             }
             step_head = create_step_head(OP_UPLOAD, TYPE_FILE, upload_json, len(block_data))
-            if SEND_LOCK.acquire():
-                client_socket = socket_setup()
-                client_socket.send(step_head + block_data)
-                client_socket.settimeout(RE_TRANSMISSION_TIME)
-                try:
-                    json_data, _ = get_step_data(client_socket)
-                    if get_status_code(json_data) == 200:
-                        client_socket.close()
-                    else:
-                        print(json_data)
-                except socket.timeout:
-                    print(f"Re Transmission{block_index}")
-                    step_upload_block(block_index)
-            SEND_LOCK.release()
+            full_packet = step_head + block_data
+            client_socket = socket_setup()
+            SEND_LOCK.acquire()
+            client_socket.send(full_packet)
+            client_socket.settimeout(RE_TRANSMISSION_TIME)
+            try:
+                json_data, _ = get_step_data(client_socket)
+                SEND_LOCK.release()
+                if get_status_code(json_data) != 200:
+                    print(json_data)
+            except socket.timeout:
+                print(f"Re Transmission{block_index}")
+                step_upload_block(block_index)
+
+            client_socket.close()
 
 
 def single_uploader(block_index, this_block_data):
@@ -159,28 +160,35 @@ def concurrent_sender(block_index, intervals):
     if intervals is None:
         SEMAPHORE.release()
         return
-
-    while block_index + intervals <= TOTAL_BLOCK:
-        block_index = block_index + intervals
-        step_upload_block(block_index)
+    if intervals is not None:
+        while block_index + intervals <= TOTAL_BLOCK:
+            block_index = block_index + intervals
+            step_upload_block(block_index)
 
 
 def main():
-    global FILE_PATH, FILE_NAME, FILE_SIZE, SEND_COUNT
+    global FILE_PATH, FILE_NAME, FILE_SIZE, SEND_COUNT, RE_TRANSMISSION_TIME
     student_id = '122'
     FILE_PATH = "files/toSend"
     FILE_NAME = os.path.basename(FILE_PATH)
     FILE_SIZE = os.path.getsize(FILE_PATH)
     total_threads = (FILE_SIZE + PACKET_LENGTH - 1) // PACKET_LENGTH
     threads = []
+
     login(student_id)
     step_save_request(FILE_NAME, FILE_SIZE)
-    # single_uploader(0, None)
+    RE_TRANSMISSION_TIME = RE_TRANSMISSION_TIME * total_threads % 5000
+
     for i in range(total_threads):
+        # if i % 16 == 0:
         SEMAPHORE.acquire()
         thread = threading.Thread(target=concurrent_sender, args=(i, None))
         threads.append(thread)
         thread.start()
+
+    if not TEST_MODE_FOR_CAN201:
+        for thread in threads:
+            thread.join()
 
 
 if __name__ == '__main__':
