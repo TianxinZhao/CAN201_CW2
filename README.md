@@ -1,6 +1,6 @@
 # [2023 1113]client_new是单线程版
 
-
+使用'''python3 client_new.py --server_ip 127.0.0.1 --id 123456 --f files/ToSend'''在命令行测试
 
 
 
