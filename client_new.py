@@ -1,3 +1,4 @@
+import argparse
 import hashlib
 import json
 import os
@@ -12,17 +13,25 @@ OP_SAVE, OP_UPLOAD, OP_LOGIN = 'SAVE', 'UPLOAD', 'LOGIN'
 FIELD_OPERATION, FIELD_DIRECTION, FIELD_TYPE, FIELD_USERNAME, FIELD_PASSWORD, FIELD_TOKEN = 'operation', 'direction', 'type', 'username', 'password', 'token'
 FIELD_KEY, FIELD_SIZE, FIELD_TOTAL_BLOCK, FIELD_MD5, FIELD_BLOCK_SIZE = 'key', 'size', 'total_block', 'md5', 'block_size'
 FIELD_STATUS, FIELD_STATUS_MSG, FIELD_BLOCK_INDEX = 'status', 'status_msg', 'block_index'
-TOKEN = None
+STUDENT_ID, TOKEN = None, None
 
 PARALLELISM = 128
 PACKET_LENGTH = 20480
 RE_TRANSMISSION_TIME = 10
 SEND_COUNT, TOTAL_BLOCK = 0, 0
 SEMAPHORE = threading.Semaphore(PARALLELISM)
-SERVER_IP, SERVER_PORT = '127.0.0.1', 1379
+SERVER_IP, SERVER_PORT = None, 1379
 FILE_PATH, FILE_NAME, FILE_SIZE = '', '', 0
 SEND_LOCK = threading.Lock()
 TEST_MODE_FOR_CAN201 = True
+
+def parse_command_line_args():
+    parser = argparse.ArgumentParser(description="Run client.py and display a token.")
+    parser.add_argument("--server_ip", required=True, help="Server IP address")
+    parser.add_argument("--id", required=True, help="User ID")
+    parser.add_argument("--f", dest="file_path", required=True, help="Path to a file")
+    args = parser.parse_args()
+    return args.server_ip, args.id, args.file_path
 
 
 def socket_setup():
@@ -167,15 +176,15 @@ def concurrent_sender(block_index, intervals):
 
 
 def main():
-    global FILE_PATH, FILE_NAME, FILE_SIZE, SEND_COUNT, RE_TRANSMISSION_TIME
-    student_id = '122'
-    FILE_PATH = "files/toSend"
+    global FILE_PATH, FILE_NAME, FILE_SIZE, SEND_COUNT, RE_TRANSMISSION_TIME, STUDENT_ID, SERVER_IP
+    SERVER_IP, STUDENT_ID, FILE_PATH = parse_command_line_args()
+
     FILE_NAME = os.path.basename(FILE_PATH)
     FILE_SIZE = os.path.getsize(FILE_PATH)
     total_threads = (FILE_SIZE + PACKET_LENGTH - 1) // PACKET_LENGTH
     threads = []
 
-    login(student_id)
+    login(STUDENT_ID)
     step_save_request(FILE_NAME, FILE_SIZE)
     RE_TRANSMISSION_TIME = RE_TRANSMISSION_TIME * total_threads % 5000
 
