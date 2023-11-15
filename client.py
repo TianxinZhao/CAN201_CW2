@@ -106,7 +106,7 @@ def step_save_operation(file_name, file_size):
 
 def step_upload_operation(block_index):
     offset = block_index * PACKET_LENGTH
-    with (open(FILE_PATH, 'rb') as file):
+    with open(FILE_PATH, 'rb') as file:
         file.seek(offset)
         block_data = file.read(PACKET_LENGTH)
         if block_data:
