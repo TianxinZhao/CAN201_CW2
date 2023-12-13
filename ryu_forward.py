@@ -15,6 +15,7 @@ from ryu.lib.packet import udp
 
 
 class SimpleSwitch13(app_manager.RyuApp):
+    # use OpenFlow 1.3
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
 
     def __init__(self, *args, **kwargs):
@@ -29,8 +30,8 @@ class SimpleSwitch13(app_manager.RyuApp):
 
         # match all package as Miss Table
         match = parser.OFPMatch()
-
         actions = [parser.OFPActionOutput(ofproto.OFPP_CONTROLLER)]
+        
         self.add_flow(datapath, 0, match, actions)
 
     def add_flow(self, datapath, priority, match, actions, buffer_id=None):
@@ -39,8 +40,7 @@ class SimpleSwitch13(app_manager.RyuApp):
 
         inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
         if buffer_id:
-            mod = parser.OFPFlowMod(datapath=datapath, buffer_id=buffer_id, priority=priority, match=match,
-                                    instructions=inst)
+            mod = parser.OFPFlowMod(datapath=datapath, buffer_id=buffer_id, priority=priority, match=match, instructions=inst)
         else:
             mod = parser.OFPFlowMod(datapath=datapath, priority=priority, match=match, instructions=inst)
         datapath.send_msg(mod)
@@ -56,11 +56,11 @@ class SimpleSwitch13(app_manager.RyuApp):
             mod = parser.OFPFlowMod(datapath=datapath, priority=priority, idle_timeout=5, match=match, instructions=inst)
         datapath.send_msg(mod)
         
-        
+    # deal with PacketIn event    
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def _packet_in_handler(self, ev):
         if ev.msg.msg_len < ev.msg.total_len:
-            self.logger.warn("packet truncated: only %s of %s bytes", ev.msg.msg_len, ev.msg.total_len)
+            self.logger.warn("Packet truncated: %s of %s bytes", ev.msg.msg_len, ev.msg.total_len)
 
         msg = ev.msg
         datapath = msg.datapath
@@ -72,14 +72,14 @@ class SimpleSwitch13(app_manager.RyuApp):
         eth = pkt.get_protocols(ethernet.ethernet)[0]
 
         if eth.ethertype == ether_types.ETH_TYPE_LLDP:
+            # ignore lldp packet
             return
 
-        eth_src = eth.src  
-        eth_dst = eth.dst  
+        eth_src = eth.src  # src MAC address
+        eth_dst = eth.dst  # dst MAC address
 
         dpid = format(datapath.id, "d").zfill(16)
         self.mac_to_port.setdefault(dpid, {})
-   
         self.logger.info("PacketIn:\n"
                          "[dpid: %s], "
                          "[src: %s], "
@@ -104,10 +104,12 @@ class SimpleSwitch13(app_manager.RyuApp):
                 ip_dst = pkt_ipv4.dst
                 ip_protocol = pkt_ipv4.proto
 
+                # If ICMP Protocol
                 if ip_protocol == in_proto.IPPROTO_ICMP:
                     match = parser.OFPMatch(eth_type=ether_types.ETH_TYPE_IP, in_port=in_port, ipv4_src=ip_src,
                                             ipv4_dst=ip_dst, ip_proto=ip_protocol)
 
+                # If TCP Protocol
                 elif ip_protocol == in_proto.IPPROTO_TCP:
                     match = parser.OFPMatch(eth_type=ether_types.ETH_TYPE_IP, in_port=in_port, ipv4_src=ip_src, ipv4_dst=ip_dst,
                                             ip_proto=ip_protocol)
