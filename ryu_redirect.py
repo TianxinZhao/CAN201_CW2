@@ -35,35 +35,32 @@ class SimpleSwitch13(app_manager.RyuApp):
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
 
+        # match all package as Miss Table
         match = parser.OFPMatch()
-        actions = [parser.OFPActionOutput(ofproto.OFPP_CONTROLLER, ofproto.OFPCML_NO_BUFFER)]
+        actions = [parser.OFPActionOutput(ofproto.OFPP_CONTROLLER)]
+        
         self.add_flow(datapath, 0, match, actions)
 
     def add_flow(self, datapath, priority, match, actions, buffer_id=None):
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
 
-        inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS,
-                                                actions)]
+        inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
         if buffer_id:
             mod = parser.OFPFlowMod(datapath=datapath, buffer_id=buffer_id, priority=priority, match=match, instructions=inst)
         else:
             mod = parser.OFPFlowMod(datapath=datapath, priority=priority, match=match, instructions=inst)
         datapath.send_msg(mod)
     
-    
     def add_flow1(self, datapath, priority, match, actions, buffer_id=None):
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
 
         inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
-
         if buffer_id:
-            mod = parser.OFPFlowMod(datapath=datapath, buffer_id=buffer_id, priority=priority, idle_timeout=5,
-                                    match=match, instructions=inst)
+            mod = parser.OFPFlowMod(datapath=datapath, buffer_id=buffer_id, priority=priority, idle_timeout=5, match=match, instructions=inst)
         else:
-            mod = parser.OFPFlowMod(datapath=datapath, priority=priority, idle_timeout=5, match=match,
-                                    instructions=inst)
+            mod = parser.OFPFlowMod(datapath=datapath, priority=priority, idle_timeout=5, match=match, instructions=inst)
         
         datapath.send_msg(mod)
     
@@ -71,7 +68,7 @@ class SimpleSwitch13(app_manager.RyuApp):
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def _packet_in_handler(self, ev):
         if ev.msg.msg_len < ev.msg.total_len:
-            self.logger.debug("packet truncated: only %s of %s bytes", ev.msg.msg_len, ev.msg.total_len)
+            self.logger.warn("packet truncated: %s of %s bytes", ev.msg.msg_len, ev.msg.total_len)
 
         msg = ev.msg
         datapath = msg.datapath
@@ -91,15 +88,15 @@ class SimpleSwitch13(app_manager.RyuApp):
 
         dpid = format(datapath.id, "d").zfill(16)
         self.mac_to_port.setdefault(dpid, {})
-        self.logger.info("PackIn Event\n"
-                         "  dpid=%s\n"
-                         "  src=%s\n"
-                         "  dst=%s\n"
-                         "  in_port=%s\n",
+        self.logger.info("PacketIn:\n"
+                         "[dpid: %s], "
+                         "[src: %s], "
+                         "[dest: %s], "
+                         "[port_in: %s]\n",
                          dpid, eth_src, eth_dst, in_port)
 
         self.mac_to_port[dpid][eth_src] = in_port
-        self.logger.info("mac_to_port Table %s \n", self.mac_to_port)
+        self.logger.info("[mac_to_port: %s]\n", self.mac_to_port)
 
         if eth_dst in self.mac_to_port[dpid]:
             out_port = self.mac_to_port[dpid][eth_dst]
@@ -107,6 +104,7 @@ class SimpleSwitch13(app_manager.RyuApp):
             out_port = ofproto.OFPP_FLOOD
 
         actions = [parser.OFPActionOutput(out_port)]
+        
         if out_port != ofproto.OFPP_FLOOD:
             if eth.ethertype == ether_types.ETH_TYPE_IP:
                 pkt_ipv4 = pkt.get_protocol(ipv4.ipv4)
@@ -114,12 +112,12 @@ class SimpleSwitch13(app_manager.RyuApp):
                 ip_dst = pkt_ipv4.dst
                 ip_protocol = pkt_ipv4.proto
 
-                # if ICMP Protocol
+                # If ICMP Protocol
                 if ip_protocol == in_proto.IPPROTO_ICMP:
                     match = parser.OFPMatch(eth_type=ether_types.ETH_TYPE_IP, in_port=in_port, ipv4_src=ip_src,
                                             ipv4_dst=ip_dst, ip_proto=ip_protocol)
 
-                # if TCP Protocol
+                # If TCP Protocol
                 elif ip_protocol == in_proto.IPPROTO_TCP:
                     if ip_src == client_1_ip and ip_dst == server_1_ip:
                         if server_2_mac in self.mac_to_port[dpid]:
@@ -165,13 +163,11 @@ class SimpleSwitch13(app_manager.RyuApp):
 
         out = parser.OFPPacketOut(datapath=datapath, buffer_id=msg.buffer_id, in_port=in_port, actions=actions,
                                   data=data)
-        self.logger.info("PackOut Event\n"
-                         "  dpid=%s\n"
-                         "  in_port=%s\n"
-                         "  actions=%s\n"
-                         "  buffer_id=%s\n",
+        self.logger.info("PacketOut:\n"
+                         "[dpid: %s], "
+                         "[in_port: %s], "
+                         "[actions: %s], "
+                         "[buffer_id: %s]\n",
                          dpid, in_port, actions, msg.buffer_id)
 
         datapath.send_msg(out)
-
-
