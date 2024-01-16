@@ -1,6 +1,12 @@
-# CAN201 CW2
-2023/12/14 
-更新:代码API
+# CAN201_CW1
+XJTLU, CAN201, Course Work 2, 2023
+
+## Authors: 
+
+Tianxin Zhao, Peiyu Hu, Tan Chen, Dingjie Cao, Heng Liu 
+
+In Group 44
+
 
 | 文件            | 描述         | Todo | Info          | Test |
 | --------------- | ------------ | ---- | ------------- | ---- |
