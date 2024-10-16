@@ -1,4 +1,4 @@
-# CAN201_CW1
+# CAN201_CW2
 XJTLU, CAN201, Course Work 2, 2023
 
 ## Authors: 
